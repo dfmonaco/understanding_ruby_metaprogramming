@@ -304,7 +304,7 @@
             <pre><code class="ruby">
   "abcde".public_send(:upcase) # => ABCDE
 
-  "abcde".public_send(:chomp, "de") # => ABC
+  "abcde".public_send(:chomp, "de") # => abc
             </code></pre>
           </section>
 
@@ -996,6 +996,8 @@ inherit is false, NameError will be raised.
             <pre><code class="ruby">
 eval "`rm -rf $HOME`"
             </code></pre>
+
+            <p>don't try this at home please.</p>
           </section>
 
           <section>
