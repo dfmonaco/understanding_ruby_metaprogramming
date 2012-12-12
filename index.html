@@ -1,0 +1,1224 @@
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+
+		<title>Metaprogramming 101</title>
+
+		<meta name="description" content="slides for presentation about Ruby Metaprogramming">
+		<meta name="author" content="Diego Mónaco">
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+		<link rel="stylesheet" href="css/reveal.min.css">
+		<link rel="stylesheet" href="css/theme/default.css" id="theme">
+
+		<!-- For syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- If the query includes 'print-pdf', use the PDF print sheet -->
+		<script>
+			document.write( '<link rel="stylesheet" href="css/print/' + ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + '.css" type="text/css" media="print">' );
+		</script>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+
+    <style>
+
+    </style>
+	</head>
+
+	<body>
+
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+
+				<section>
+					<h1>Ruby Metaprogramming 101</h1>
+					<p>
+						<strong>by <a href="http://dfmonaco.github.com">Diego Mónaco</a></strong>
+					</p>
+				</section>
+
+				<section>
+					<h2>Foundations</h2>
+            <ul>
+              <li class="fragment"> Everything is an object</li>
+              <li class="fragment"> Who is self?</li>
+              <li class="fragment"> Method lookup</li>
+            </ul>
+				</section>
+
+        <section>
+          <section>
+
+            <h2>Everything is an Object</h2>
+
+            <pre><code class="ruby">
+  nil.class # => NilClass
+  nil.object_id # => 4
+
+  false.class # => FalseClass
+  false.object_id # => 0
+
+  true.class # => TrueClass
+  true.object_id # => 2
+
+  3.class # => Fixnum
+  3.object_id # => 7
+
+  Foo = Class.new
+
+  Foo.class # => Class
+  Foo.object_id # => 75217210
+            </code></pre>
+
+          </section>
+
+          <section>
+
+            <h2>Class objects</h2>
+
+            <ul>
+              <li class="fragment"> Classes are just objects with the ability to define instance methods on their body, and spawn new objects</li>
+              <li class="fragment"> An instance of a class called Class is created the first time you open a class</li>
+              <li class="fragment"> The name of a Class is just a constant pointing to a Class object</li>
+              <li class="fragment"> All classes can be reopened</li>
+            </ul>
+
+          </section>
+
+          <section>
+            <p>The following snippets are equivalent:</p>
+
+            <pre><code class="ruby">
+  class Foo
+    def foo
+    end
+  end
+
+  Foo = Class.new do
+    def foo
+    end
+  end
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Re opening classes</p>
+
+            <pre><code class="ruby">
+ class Foo
+   def method_one
+   end
+ end
+
+ Foo.instance_methods(false) # => [:method_one]
+
+ class Foo
+   def method_two
+   end
+ end
+
+ Foo.instance_methods(false) # => [:method_one, :method_two]
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Re opening NilClass</p>
+
+            <pre><code class="ruby">
+  class NilClass
+    def wtf!
+      puts 'this is crazy'
+    end
+  end
+
+  nil.wtf! # => this is crazy
+            </code></pre>
+
+          </section>
+
+          <section>
+            <p>Re opening Class</p>
+
+            <pre><code class="ruby">
+  class Class
+    def chatty_new
+      puts "Hi, I'm about to create a new object!"
+
+      new
+    end
+  end
+
+  class Bar; end
+  class Foo; end
+
+  Bar.chatty_new # => Hi, I'm about to create a new object! 
+                 # => #&lt;Bar:0x909cd0c&gt;
+
+  Foo.chatty_new # => Hi, I'm about to create a new object! 
+                 # => #&lt;Foo:0x924c8c8&gt;
+            </code></pre>
+
+          </section>
+
+          <section>
+
+            <h2>What about Modules?</h2>
+
+            <ul>
+              <li class="fragment"> Modules are just like Classes but can't instantiate objects</li>
+              <li class="fragment"> A Class is a Module, but can't be mixed-in</li>
+            </ul>
+
+          </section>
+
+          <section>
+            <p>Don't trust me let's ask ruby</p>
+
+            <pre><code class="ruby">
+  class Foo; end
+
+  Foo.is_a? Module # => true
+
+  Class.superclass #  => Module
+
+  Class.instance_methods(false) # => [:allocate, :new, :superclass]
+
+  module M; end
+
+  M.respond_to? :new # => false
+            </code></pre>
+
+          </section>
+
+        </section>
+
+				<section>
+          <section>
+            <h2>Who is self?</h2>
+
+            <ul>
+              <li class="fragment"> In ruby you are always inside an object and 'self' is the current object </li>
+              <li class="fragment"> Any method call without an explicit receiver will be sent to 'self'</li>
+              <li class="fragment"> There is always one (and only one) object playing the role of 'self' at a given time </li>
+              <li class="fragment"> The role of 'self' will be played by different objects depending on context</li>
+              <li class="fragment"> Is the owner of instance variables </li>
+            </ul>
+
+          </section>
+          <section>
+            <p>A different 'self' for each context</p>
+
+            <pre><code class="ruby">
+  # Top Level Context
+  puts self # => main
+
+  class Foo
+    # Class Body Context
+    puts self # => Foo
+
+    module M
+      # Module Body context
+      puts self # => Foo::M
+    end
+
+    def a_method
+      # Method Body Context
+      puts self
+      another_method
+    end
+
+    def another_method
+      puts self
+    end
+  end
+
+  Foo.new.a_method # => #&lt;Foo:0x471004&gt;
+                   # => #&lt;Foo:0x471004&gt;
+  Foo.new.a_method # => #&lt;Foo:0x34c566&gt;
+                   # => #&lt;Foo:0x34c566&gt;
+            </code></pre>
+
+          </section>
+          <section>
+            <p>Instance variable ownership</p>
+
+            <pre><code class="ruby">
+  class Foo
+    @foo_iv = "Foo_iv"
+
+    def initialize(iv_value)
+      @foo_iv = iv_value
+    end
+  end
+
+  Foo.instance_variable_get :@foo_iv # => "Foo_iv"
+
+  Foo.new("foo_1_iv").instance_variable_get :@foo_iv # => "foo_1_iv"
+  Foo.new("foo_2_iv").instance_variable_get :@foo_iv # => "foo_2_iv"
+            </code></pre>
+
+          </section>
+
+          <section>
+            <p>Instance variables in the top level context</p>
+
+            <pre><code class="ruby">
+  # Top Level context
+
+  @main_iv = "main_iv"
+
+  m = self # => main
+
+  m.instance_variable_get :@main_iv # => "main_iv"
+            </code></pre>
+
+          </section>
+				</section>
+
+        <section>
+
+          <section>
+            <h2>Method lookup</h2>
+
+              <ul>
+                <li class="fragment"> All methods are defined in classes or modules</li>
+                <li class="fragment"> Objects receive messages and execute methods</li>
+                <li class="fragment"> They find them by searching through classes and modules</li>
+                <li class="fragment"> The search ends with the method execution when it is found or with an error if it isn't found</li>
+                <li class="fragment"> The list of classes and modules where the search is performed is called the 'method lookup path'</li>
+                <li class="fragment"> The 'method lookup path' is defined by the ancestors chain of the object's class</li>
+                <li class="fragment"> The class Object is the default superclass</li>
+              </ul>
+
+          </section>
+
+          <section>
+            <p>Sending messages</p>
+
+            <pre><code class="ruby">
+  "abcde".public_send(:upcase) # => ABCDE
+
+  "abcde".public_send(:chomp, "de") # => ABC
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Breaking encapsulation</p>
+
+            <pre><code class="ruby">
+  class Foo
+
+    private
+
+    def a_private_method
+      "you should not be calling me from the ouside world"
+    end
+
+  end
+
+  foo = Foo.new
+  foo.send(:a_private_method) # => you should not be calling me from the ouside world
+
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Method Lookup Rule:</p>
+
+            <h2>"one step to the right, then up"</h2>
+
+              <p>Go one step to the right into the receiver's class, and then up the ancestors chain, until you find the method</p>
+
+          </section>
+
+          <section>
+            <p>Riding the ancestors chain with 'super'</p>
+
+            <pre><code class="ruby">
+  module M
+    def hello
+      puts 'Hi from M'
+    end
+  end
+
+  class Bar
+    include M
+
+    def hello
+      puts 'Hi from Bar'
+      super
+    end
+  end
+
+  class Foo < Bar
+    def hello
+      puts 'Hi from Foo'
+      super
+    end
+  end
+
+  foo = Foo.new
+
+  foo.hello  # Hi from Foo
+             # Hi from Bar
+             # Hi from M
+
+  foo.class.ancestors # => [Foo, Bar, M, Object, Kernel, BasicObject]
+            </code></pre>
+          </section>
+
+          <section>
+            <pre><code class="ruby">
+  [Foo, Bar].each { |c| c.send(:remove_method, :hello) }
+
+  foo.hello # => Hi from M
+            </code></pre>
+          </section>
+
+          <section>
+          <p>modules are searched in reverse orden of inclusion</p>
+            <pre><code class="ruby">
+  module M; end
+
+  module N; end
+
+  class A
+    include M
+    include N
+  end
+
+  A.ancestors # => [A, N, M, Object, Kernel, BasicObject]
+            </code></pre>
+          </section>
+
+          <section>
+            <h2>The Ghost class</h2>
+
+            <ul>
+              <li class="fragment"> Better known as Eigenclass, Metaclass or Singleton class</li>
+              <li class="fragment"> Is an anonymous class</li>
+              <li class="fragment"> For all practical purposes is a class like any other</li>
+              <li class="fragment"> Is where per object behavior gets defined</li>
+              <li class="fragment"> Is always the first class in the 'method lookup path'</li>
+            </ul>
+
+          </section>
+
+          <section>
+            <p>Defining singleton methods</p>
+
+            <pre><code class="ruby">
+  o = Object.new
+
+  def o.bar
+    "Hi from o's singleton class"
+  end
+
+  puts o.bar # => Hi from o's singleton class
+
+  x = Object.new
+
+  x.bar # => NoMethodError: undefined method `bar' for #&lt;Object:0x909cd0c&gt; 
+
+  class << x
+    def bar
+      "Hi from x's singleton class"
+    end
+  end
+
+  x.bar # => Hi from x's singleton class
+            </code></pre>
+          </section>
+
+          <section>
+            <p>The Eigenclass superclass</p>
+
+            <pre><code class="ruby">
+  class A
+  end
+
+  a = A.new
+
+  a.singleton_class.superclass # => A
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Including a module in a singleton class</p>
+
+            <pre><code class="ruby">
+  module N
+    def baz
+      puts 'Hi from N'
+    end
+  end
+
+  z = Object.new
+
+  class << z
+    include N
+  end
+
+  z.baz # => 'Hi from N'
+            </code></pre>
+          </section>
+
+          <section>
+          <p><strong>class methods:</strong> ordinary methods defined in the 'singleton class' of the given class instance</p>
+            <pre><code class="ruby">
+  class A
+    def self.one
+      'one'
+    end
+
+    def A.two
+      'two'
+    end
+
+    class << self
+      def three
+        'three'
+      end
+    end
+  end
+
+  A.one   # => one
+  A.two   # => two
+  A.three # => three
+
+  A.singleton_class.instance_methods(false) # => [:one, :two, :three]
+  A.singleton_class.ancestors # => [Class, Module, Object, Kernel, BasicObject]
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Class methods inheritance</p>
+
+            <pre><code class="ruby">
+  class A
+   def self.a_class_method
+     "Hi from A"
+   end
+  end
+
+  B = Class.new(A)
+
+  B.a_class_method # => Hi from A
+            </code></pre>
+          </section>
+
+          <section>
+            <p>Here is a tongue-twister:</p>
+
+            <p>"The superclass of the eigenclass of a regular object is the object’s class"</p>
+            <p>"The superclass of the eigenclass of a class object is the eigenclass of the class’s superclass"</p>
+          </section>
+
+          <section>
+            <p>Class methods inheritance</p>
+
+            <pre><code class="ruby">
+  class Module
+    def foo
+      puts 'Hi from Module'
+    end
+  end
+
+  class Class
+    def foo
+      puts 'Hi from Class'
+      super
+    end
+  end
+
+  class Object
+    def self.foo
+      puts 'Hi from Object eigenclass'
+      super
+    end
+  end
+
+  class A
+    def self.foo
+      puts 'Hi from A eigenclass'
+      super
+    end
+  end
+
+  class B < A
+    def self.foo
+      puts 'Hi from B eigenclass'
+      super
+    end
+  end
+
+
+  B.foo  # => Hi from B eigenclass
+         # => Hi from A eigenclass
+         # => Hi from Object eigenclass
+         # => Hi from Class
+         # => Hi from Module
+            </code></pre>
+          </section>
+
+          <section>
+            <p>What happened?</p>
+
+            <pre><code class="ruby">
+  klass = B.singleton_class
+
+  while klass.superclass
+    puts klass
+    klass = klass.superclass
+  end
+
+#&lt;Class:B&gt; B eigenclass
+#&lt;Class:A&gt; A eigenclass
+#&lt;Class:Object&gt; Object eigenclass
+#&lt;Class:BasicObject&gt; BasicObject eigenclass
+Class
+Module
+Object
+            </code></pre>
+          </section>
+        </section>
+
+        <section>
+          <h2>Show me the metaprogramming!</h2>
+
+        </section>
+
+        <section>
+          <p>Wait, wtf is metaprogramming!</p>
+
+          <p>Metaprogramming: "code that writes code"</p>
+
+        </section>
+
+
+        <section>
+          <p>Euclidean meta-geometry</p>
+
+          <pre><code class="ruby">
+
+module Geometry
+  FORMULAS = {
+    triangle: {perimeter: 'l1+l2+l3', area: 'b*h/2'},
+    rectangle: {perimeter: 'l1*2+l2*2', area: 'l1*l2'},
+    circle: {perimeter: '2*3.14*r', area: '3.14*r*r'}
+  }
+end
+
+Geometry::FORMULAS[:triangle][:perimeter]
+=> "l1+l2+l3"
+          </code></pre>
+        </section>
+
+        <section>
+          <section>
+            <p>Let's get user friendly</p>
+
+            <pre><code class="ruby">
+
+Geometry.triangle_area
+# => "b*h/2"
+
+Geometry.circle_perimeter
+# => "2*2.14*r"
+
+            </code></pre>
+          </section>
+
+          <section>
+            <p></p>
+
+            <pre><code class="ruby">
+module Geometry
+  FORMULAS = {
+    triangle: {perimeter: 'l1+l2+l3', area: 'b*h/2'},
+    rectangle: {perimeter: 'l1*2+l2*2', area: 'l1*l2'},
+    circle: {perimeter: '2*3.14*r', area: '3.14*r*r'}
+  }
+
+  def self.triangle_perimeter
+    Geometry::FORMULAS[:triangle][:perimeter]
+  end
+
+  def self.triangle_area
+    Geometry::FORMULAS[:triangle][:area]
+  end
+
+  def self.rectangle_perimeter
+    Geometry::FORMULAS[:rectangle][:perimeter]
+  end
+
+  # def self.rectangle_area
+
+  # def self.circle_perimeter
+
+  # etc, etc
+end
+            </code></pre>
+          </section>
+        </section>
+
+        <section>
+          <p>We are lazy</p>
+
+          <pre><code class="ruby">
+module Geometry
+  FORMULAS = {
+    triangle: {perimeter: 'l1+l2+l3', area: 'b*h/2'},
+    rectangle: {perimeter: 'l1*2+l2*2', area: 'l1*l2'},
+    circle: {perimeter: '2*3.14*r', area: '3.14*r*r'}
+  }
+
+  class << self
+    def triangle_perimeter
+      Geometry::FORMULAS[:triangle][:perimeter]
+    end
+
+    def triangle_area
+      Geometry::FORMULAS[:triangle][:area]
+    end
+
+    def rectangle_perimeter
+      Geometry::FORMULAS[:rectangle][:perimeter]
+    end
+
+    # def rectangle_area
+
+    # def circle_perimeter
+
+    # etc, etc
+  end
+end
+
+          </code></pre>
+        </section>
+
+        <section>
+          <section>
+            <p>We are Really lazy</p>
+
+            <pre><code class="ruby">
+module Geometry
+  FORMULAS = {
+    triangle: {perimeter: 'l1+l2+l3', area: 'b*h/2'},
+    rectangle: {perimeter: 'l1*2+l2*2', area: 'l1*l2'},
+    circle: {perimeter: '2*3.14*r', area: '3.14*r*r'}
+  }
+
+  class << self
+    FORMULAS.each do |figure, formulas|
+      formulas.each do |name, expression|
+        define_method "#{figure}_#{name}" do
+          expression
+        end
+      end
+    end
+  end
+end
+
+Geometry.circle_area
+# => "3.14*r*r"
+Geometry.singleton_methods
+# => [:triangle_perimeter, :triangle_area, :rectangle_perimeter, :rectangle_area, :circle_perimeter, :circle_area]
+            </code></pre>
+          </section>
+
+          <section>
+            <p>define_method</p>
+
+            <pre><code class="ruby">
+# From: proc.c (C Method):
+# Number of lines: 30
+# Owner: Module
+# Visibility: private
+# Signature: define_method(*arg1)
+
+# Defines an instance method in the receiver. The _method_
+# parameter can be a Proc, a Method or an UnboundMethod object.
+# If a block is specified, it is used as the method body. This block
+# is evaluated using instance_eval, a point that is
+# tricky to demonstrate because define_method is private.
+# (This is why we resort to the send hack in this example.)
+
+   class A
+
+     def fred
+       puts "In Fred"
+     end
+
+     def create_method(name, &block)
+       self.class.send(:define_method, name, &block)
+     end
+
+     define_method(:wilma) { puts "Charge it!" }
+   end
+
+   class B < A
+     define_method(:barney, instance_method(:fred))
+   end
+
+   a = B.new
+   a.barney
+   a.wilma
+   a.create_method(:betty) { p self }
+   a.betty
+
+# produces:
+
+#    In Fred
+#    Charge it!
+   #&lt;B:0x401b39e8&gt;
+            </code></pre>
+          </section>
+          </section>
+
+
+          <section>
+            <section>
+              <p>Hey! we can use classes!</p>
+
+              <pre><code class="ruby">
+class Rectangle
+  attr_reader :l1, :l2
+
+  FORMULAS = {perimeter: 'l1*2+l2*2', area: 'l1*l2'}
+
+  def initialize(attrs)
+    @l1, @l2 = attrs[:l1], attrs[:l2]
+  end
+
+  def perimeter
+    l1*2+l2*2
+  end
+
+  def area
+    l1*l2
+  end
+
+  FORMULAS.each do |name, expression|
+    define_method "#{name}_formula" do
+      expression
+    end
+  end
+end
+
+r = Rectangle.new(l1:3, l2:4)
+r.area # => 12
+r.area_formula # => l1*2+l2*2
+              </code></pre>
+            </section>
+
+            <section>
+              <p>But :(</p>
+
+              <pre><code class="ruby">
+# class Triangle
+#   blah, blah
+
+# class Circle
+#   blah, blah
+
+# class Whatever
+#   blah, blah
+
+#   etc, etc
+
+              </code></pre>
+            </section>
+          </section>
+
+        <section>
+          <section>
+            <p>Let's dream</p>
+
+            <pre><code class="ruby">
+Rectangle = Euclides.define :rectangle,
+                            [:l1,:l2],
+                            perimeter: 'l1*2+l2*2',
+                            area: 'l1*l2'
+
+Triangle  = Euclides.define :triangle,
+                            [:l1,:l2,:l3,:b,:h],
+                            perimeter: 'l1+l2+l3',
+                            area: 'b*h2'
+
+Circle    = Euclides.define :circle,
+                            [:r],
+                            perimeter: '2*3.14*r',
+                            area: '3.14*r*r'
+            </code></pre>
+          </section>
+
+          <section>
+            <p></p>
+
+            <pre><code class="ruby">
+module Euclides
+  class << self
+    def define(figure, attributes, formulas)
+      Class.new do
+        const_set('FORMULAS', formulas)
+
+        attr_reader *attributes
+
+        define_method :initialize do |attrs|
+          attributes.each do |attr|
+            instance_variable_set("@#{attr}", attrs[attr])
+          end
+        end
+
+        const_get('FORMULAS').each do |name, expression|
+          define_method "#{name}_formula" do
+            expression
+          end
+
+          define_method name do
+            eval expression
+          end
+        end
+
+      end
+    end
+  end
+end
+            </code></pre>
+          </section>
+
+          <section>
+            <p></p>
+
+            <pre><code class="ruby">
+r = Rectangle.new l1:3, l2:5
+r.l1 # => 3
+r.area_formula # => l1*l2
+r.area # => 15
+Rectangle::FORMULAS
+# => {:perimeter=>"l1*2+l2*2", :area=>"l1*l2"}
+            </code></pre>
+          </section>
+
+          <section>
+            <p>const_set</p>
+
+            <pre><code class="ruby">
+# From: object.c (C Method):
+# Number of lines: 6
+# Owner: Module
+# Visibility: public
+# Signature: const_set(arg1, arg2)
+
+# Sets the named constant to the given object, returning that object.
+# Creates a new constant if no constant with the given name previously
+# existed.
+
+   Math.const_set("HIGH_SCHOOL_PI", 22.0/7.0)   #=> 3.14285714285714
+   Math::HIGH_SCHOOL_PI - Math::PI              #=> 0.00126448926734968
+            </code></pre>
+          </section>
+
+          <section>
+            <p>instance_variable_set</p>
+
+            <pre><code class="ruby">
+# From: object.c (C Method):
+# Number of lines: 14
+# Owner: Kernel
+# Visibility: public
+# Signature: instance_variable_set(arg1, arg2)
+
+# Sets the instance variable names by symbol to
+# object, thereby frustrating the efforts of the class's
+# author to attempt to provide proper encapsulation. The variable
+# did not have to exist prior to this call.
+
+   class Fred
+     def initialize(p1, p2)
+       @a, @b = p1, p2
+     end
+   end
+
+   fred = Fred.new('cat', 99)
+   fred.instance_variable_set(:@a, 'dog')   #=> "dog"
+   fred.instance_variable_set(:@c, 'cat')   #=> "cat"
+   fred.inspect                             #=> "#&lt;Fred:0x401b3da8 @a=\"dog\", @b=99, @c=\"cat\"&gt;
+            </code></pre>
+          </section>
+
+          <section>
+            <p>const_get</p>
+
+            <pre><code class="ruby">
+# From: object.c (C Method):
+# Number of lines: 6
+# Owner: Module
+# Visibility: public
+# Signature: const_get(*arg1)
+
+# Returns the value of the named constant in mod.
+
+   Math.const_get(:PI)   #=> 3.14159265358979
+
+If the constant is not defined or is defined by the ancestors and
+inherit is false, NameError will be raised.
+            </code></pre>
+          </section>
+
+          <section>
+            <p>eval</p>
+
+            <pre><code class="ruby">
+# From: vm_eval.c (C Method):
+# Number of lines: 12
+# Owner: Kernel
+# Visibility: private
+# Signature: eval(*arg1)
+
+# Evaluates the Ruby expression(s) in string. If
+# binding is given, which must be a Binding
+# object, the evaluation is performed in its context. If the
+# optional filename and lineno parameters are
+# present, they will be used when reporting syntax errors.
+
+   def getBinding(str)
+     return binding
+   end
+   str = "hello"
+   eval "str + ' Fred'"                      #=> "hello Fred"
+   eval "str + ' Fred'", getBinding("bye")   #=> "bye Fred"
+            </code></pre>
+          </section>
+
+          <section>
+            <h2>Warning:</h2>
+
+            <pre><code class="ruby">
+eval "`rm -rf $HOME`"
+            </code></pre>
+          </section>
+
+        </section>
+
+        <section>
+          <section>
+            <p>Let's get fancy</p>
+
+            <pre><code class="ruby">
+Triangle  = Euclides.define_triangle [:l1,:l2,:l3,:b,:h],
+                                     perimeter: 'l1+l2+l3',
+                                     area: 'b*h2'
+
+Circle    = Euclides.define_circle [:r],
+                                   perimeter: '2*3.14*r',
+                                   area: '3.14*r*r'
+
+Fooaedro  = Euclides.define_fooaedro [:foo, :bar, :baz],
+                                     foometer: '3*foo+bar',
+                                     barea: '12.4*foo/bar',
+                                     bazity: 'baz*0.56'
+            </code></pre>
+          </section>
+
+          <section>
+            <p></p>
+
+            <pre><code class="ruby">
+module Euclides
+  class << self
+    def define(figure, attributes, formulas)
+      Class.new do
+        const_set('FORMULAS', formulas)
+
+        attr_reader *attributes
+
+        define_method :initialize do |attrs|
+          attributes.each do |attr|
+            instance_variable_set("@#{attr}", attrs[attr])
+          end
+        end
+
+        const_get('FORMULAS').each do |name, expression|
+
+          define_method "#{name}_formula" do
+            expression
+          end
+
+          define_method name do
+            eval expression
+          end
+
+        end
+      end
+    end
+
+    def method_missing(method_name, *args)
+      if method_name.to_s =~ /^define_(.*)$/
+        public_send(:define, $1.to_sym, *args)
+      else
+        super
+      end
+    end
+
+  end
+end
+
+            </code></pre>
+          </section>
+
+          <section>
+            <p></p>
+
+            <pre><code class="ruby">
+f=Fooaedro.new foo:23, bar:34, baz:12.5
+# => #&lt;Fooaedro:0x9bcb78c @bar=34, @baz=12.5, @foo=23&gt;
+f.foometer
+# => 103
+f.barea
+# => 8.388235294117647
+f.bazity
+# => 7.000000000000001
+Fooaedro::FORMULAS
+# => {:foometer=>"3*foo+bar", :barea=>"12.4*foo/bar", :bazity=>"baz*0.56"}
+f.foometer_formula
+# => "3*foo+bar"
+            </code></pre>
+          </section>
+
+          <section>
+            <p>method_missing</p>
+
+            <pre><code class="ruby">
+# From: vm_eval.c (C Method):
+# Number of lines: 27
+# Owner: BasicObject
+# Visibility: private
+# Signature: method_missing(*arg1)
+
+# Invoked by Ruby when obj is sent a message it cannot handle.
+# symbol is the symbol for the method called, and args
+# are any arguments that were passed to it. By default, the interpreter
+# raises an error when this method is called. However, it is possible
+# to override the method to provide more dynamic behavior.
+# If it is decided that a particular method should not be handled, then
+# super should be called, so that ancestors can pick up the
+# missing method.
+# The example below creates
+# a class Roman, which responds to methods with names
+# consisting of roman numerals, returning the corresponding integer
+# values.
+
+   class Roman
+     def romanToInt(str)
+       # ...
+     end
+     def method_missing(methId)
+       str = methId.id2name
+       romanToInt(str)
+     end
+   end
+
+   r = Roman.new
+   r.iv      #=> 4
+   r.xxiii   #=> 23
+   r.mm      #=> 2000
+            </code></pre>
+          </section>
+
+          <section>
+            <p>public_send</p>
+
+            <pre><code class="ruby">
+# From: vm_eval.c (C Method):
+# Number of lines: 5
+# Owner: Kernel
+# Visibility: public
+# Signature: public_send(*arg1)
+
+# Invokes the method identified by _symbol_, passing it any
+# arguments specified. Unlike send, public_send calls public
+# methods only.
+
+   1.public_send(:puts, "hello")  # causes NoMethodError
+            </code></pre>
+
+          </section>
+        </section>
+
+        <section>
+          <h3>See also:</h3>
+
+          <ul>
+            <li> class_eval </li>
+            <li> instance_eval </li>
+            <li> ..... </li>
+            <li> Hooks:
+                <ul>
+                  <li> included </li>
+                  <li> extended </li>
+                  <li> inherited </li>
+                  <li> .... </li>
+                </ul>
+            </li>
+
+          </ul>
+
+        </section>
+
+        <section>
+          <p>Explore</p>
+          <p>Mix and Match</p>
+          <p>Use your imagination</p>
+        </section>
+
+        <section>
+          <h2>Gracias!</h2>
+        </section>
+
+			</div>
+
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.min.js"></script>
+
+		<script>
+
+			// Full list of configuration options available here:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+
+				theme: Reveal.getQueryHash().theme, // available themes are in /css/theme
+				transition: Reveal.getQueryHash().transition || 'cube', // default/cube/page/concave/zoom/linear/none
+
+				// Optional libraries used to extend on reveal.js
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/markdown/showdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+					{ src: 'plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+					// { src: 'plugin/remotes/remotes.js', async: true, condition: function() { return !!document.body.classList; } }
+				]
+			});
+
+		</script>
+
+	</body>
+</html>
